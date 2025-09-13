@@ -1,110 +1,178 @@
-// Declare variables to hold the chessboard instance and the chess game logic
+// Blackjack + Chess integration
+// Assumes jQuery, chessboard.js, chess.js already loaded
+
 let board = null;
 let game = null;
 
-// Function to initialize the chessboard and chess game
+// Blackjack state
+let deck = [];
+let playerHand = [];
+let dealerHand = [];
+let blackjackWinner = null; // "player" | "dealer" | null
+let blackjackActive = true; // true while blackjack round is ongoing
+let allowedColor = null;    // 'w' or 'b' - which color is allowed to move next
+
+// ---------------- CHESS ----------------
 function initChess() {
-    // Create a new Chess.js game instance
-    game = new Chess();
+  game = new Chess();
+  board = Chessboard('chessboard', {
+    draggable: true,
+    position: 'start',
+    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
 
-    // Initialize Chessboard.js board with configuration
-    board = Chessboard('chessboard', {
-        draggable: true, // Allow pieces to be dragged with the mouse
-        position: 'start', // Set initial position to standard chess start
-        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png', // Use online images for chess pieces
+    onDragStart: function(source, piece) {
+      if (blackjackActive) return false; // block chess during blackjack
+      if (allowedColor && piece[0] !== allowedColor) return false; // only allowed color can move
+      if (game.game_over()) return false;
+    },
 
-        // Event triggered when a piece is picked up
-        onDragStart: function (source, piece, position, orientation) {
-            // Prevent dragging if the game is over
-            if (game.game_over()) return false;
+    onDrop: function(source, target) {
+        let promotion = 'q';
+        const movingPiece = game.get(source);
+        if (movingPiece && movingPiece.type === 'p' && (target[1] === '8' || target[1] === '1')) {
+            promotion = prompt("Promote to (q,r,b,n)","q");
+            if(!['q','r','b','n'].includes(promotion)) promotion='q';
+        }
 
-            // Prevent moving opponent's pieces
-            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
-                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
-                return false;
-            }
+        const move = game.move({from: source, to: target, promotion});
+        if(move === null) return 'snapback';
+
+        updateStatus();
+
+        // Only start next blackjack round if allowedColor just moved
+        if (allowedColor) {
+            allowedColor = null;
+            startBlackjack();
+        }
         },
 
-        // Event triggered when a piece is dropped on a square
-        onDrop: function (source, target) {
-            let promotion = 'q'; // Default promotion piece is queen
-            const movingPiece = game.get(source); // Get the piece being moved
-
-            // Check if pawn reaches last rank for promotion
-            if (movingPiece && movingPiece.type === 'p' && (target[1] === '8' || target[1] === '1')) {
-                // Ask user which piece to promote to
-                promotion = prompt("Promote to (q,r,b,n):", "q");
-                // Validate user input, default to queen if invalid
-                if (!['q','r','b','n'].includes(promotion)) promotion = 'q';
-            }
-
-            // Attempt to make the move in Chess.js
-            const move = game.move({ from: source, to: target, promotion: promotion });
-
-            // If move is illegal, snap the piece back to its original square
-            if (move === null) return 'snapback';
-
-            // Update status text and check for check/checkmate/draw
-            updateStatus();
-
-            // Note: We do NOT update the board position here to avoid double-draw UI issue
-        },
-
-        // Event triggered after the piece has finished moving (drag animation ends)
         onSnapEnd: function() {
-            // Update the board position to match the current game state
-            board.position(game.fen());
+        // Only snap back if move was invalid
+        board.position(game.fen());
         }
-    });
+  });
 
-    // Initialize status display after creating the board
-    updateStatus();
+  updateStatus();
 }
 
-// Function to update game status display and show alerts for game over
+function setChessTurn(color) {
+  // Force chess.js turn to the given color safely
+  const fenParts = game.fen().split(' ');
+  fenParts[1] = color; // 'w' or 'b'
+  fenParts[3] = '-';   // reset en passant square to prevent illegal FEN issues
+  game.load(fenParts.join(' '));
+  board.position(game.fen());
+  updateStatus();
+}
+
+function unlockChessMoves() {
+  blackjackActive = false;
+}
+
 function updateStatus() {
-    let status = ''; // Status text to display
-    let moveColor = (game.turn() === 'w') ? 'White' : 'Black'; // Determine which player's turn
-
-    // Check for game over conditions
-    if (game.in_checkmate()) {
-        status = 'Game over, ' + moveColor + ' is in checkmate.';
-        alert(status); // Show popup alert for checkmate
-    }
-    else if (game.in_draw()) {
-        status = 'Game over, drawn position.';
-        alert(status); // Show popup alert for draw
-    }
-    else if (game.in_stalemate()) {
-        status = 'Game over, stalemate.';
-        alert(status); // Show popup alert for stalemate
-    }
-    else {
-        // Normal turn message
-        status = moveColor + ' to move';
-        // If current player is in check, append warning
-        if (game.in_check()) {
-            status += ', ' + moveColor + ' is in check';
-        }
-    }
-
-    // Update the status-bar div with current status text
-    $('#status-bar').text(status);
+  let status = '';
+  let moveColor = (game.turn() === 'w') ? 'White' : 'Black';
+  if (game.in_checkmate()) status = 'Game over, ' + moveColor + ' is in checkmate.';
+  else if (game.in_draw()) status = 'Game over, drawn position.';
+  else if (game.in_stalemate()) status = 'Game over, stalemate.';
+  else status = moveColor + ' to move' + (game.in_check() ? ', ' + moveColor + ' is in check' : '');
+  $('#status-bar').text(status);
 }
 
-// Function to reset the game and chessboard to initial state
-function resetGame() {
-    game.reset(); // Reset Chess.js game state
-    board.start(); // Reset Chessboard.js board visually
-    updateStatus(); // Update status text for new game
+// ---------------- BLACKJACK ----------------
+function startBlackjack() {
+  blackjackActive = true;
+  blackjackWinner = null;
+
+  deck = createDeck();
+  playerHand = [drawCard(), drawCard()];
+  dealerHand = [drawCard(), drawCard()];
+
+  renderBlackjack();
+  $('#blackjack-status').text("Blackjack: play your round (Hit/Stand).");
+  $('#hit-btn').prop('disabled', false);
+  $('#stand-btn').prop('disabled', false);
 }
 
-// Wait until the DOM is fully loaded before initializing chess
-$(document).ready(function() {
-    initChess(); // Initialize chessboard and game
+function createDeck() {
+  const suits=['♠','♥','♦','♣'], ranks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  let d=[];
+  for(let s of suits) for(let r of ranks) d.push({suit:s, rank:r});
+  for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
 
-    // Bind click event to the Start/Reset button
-    $('#start-btn').click(function(){
-        resetGame(); // Reset game when button is clicked
-    });
+function drawCard(){return deck.pop();}
+
+function handValue(hand){
+  let total=0, aces=0;
+  for(let c of hand){
+    if(['J','Q','K'].includes(c.rank)) total+=10;
+    else if(c.rank==='A'){total+=11; aces++;}
+    else total+=parseInt(c.rank,10);
+  }
+  while(total>21 && aces>0){total-=10; aces--;}
+  return total;
+}
+
+function renderBlackjack(){
+  $('#player-hand').text("Player: "+playerHand.map(c=>c.rank+c.suit).join(' ')+" ("+handValue(playerHand)+")");
+  $('#dealer-hand').text("Dealer: "+dealerHand.map(c=>c.rank+c.suit).join(' ')+" ("+handValue(dealerHand)+")");
+}
+
+function playerHit(){
+  if(!blackjackActive || blackjackWinner) return;
+  playerHand.push(drawCard());
+  renderBlackjack();
+  if(handValue(playerHand) > 21) endBlackjack('dealer');
+}
+
+function playerStand(){
+  if(!blackjackActive || blackjackWinner) return;
+  dealerPlay();
+}
+
+function dealerPlay(){
+  while(handValue(dealerHand)<17) dealerHand.push(drawCard());
+  renderBlackjack();
+  const p = handValue(playerHand), d = handValue(dealerHand);
+  if(p > 21) endBlackjack('dealer');
+  else if(d > 21) endBlackjack('player');
+  else if(p > d) endBlackjack('player');
+  else endBlackjack('dealer');
+}
+
+function endBlackjack(winner){
+  blackjackWinner = winner;
+  blackjackActive = false;
+  renderBlackjack();
+
+  // Set allowed chess color to move
+  allowedColor = (winner === 'player') ? 'w' : 'b';
+  setChessTurn(allowedColor);
+
+  const msg = (winner === 'player') ?
+    "Player won the blackjack round — White plays next in chess." :
+    "Dealer won the blackjack round — Black plays next in chess.";
+
+  setTimeout(()=>{
+    alert(msg);
+    unlockChessMoves();
+    $('#blackjack-status').text(msg);
+  }, 1000);
+}
+
+// ---------------- INIT ----------------
+$(document).ready(function(){
+  initChess();
+  startBlackjack();
+
+  $('#hit-btn').click(playerHit);
+  $('#stand-btn').click(playerStand);
+  $('#start-btn').click(function(){
+    game.reset();
+    board.start();
+    updateStatus();
+    startBlackjack();
+  });
 });

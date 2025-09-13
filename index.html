@@ -13,9 +13,20 @@
 </head>
 <body>
 
-<h1>♟️ Blackjack Chess 🃏</h1>
-<div id="chessboard"></div>
+<h2>♟️ Chessboard</h2>
+<div id="chessboard" style="width: 500px; margin: auto;"></div>
+<div id="status-bar"></div>
 
+<h2>🃏 Blackjack</h2>
+<div id="blackjack">
+  <div id="player-hand"></div>
+  <div id="dealer-hand"></div>
+  <p id="blackjack-status"></p>
+  <button id="hit-btn">Hit</button>
+  <button id="stand-btn">Stand</button>
+</div>
+
+<button id="start-btn">Reset Game</button>
 <!-- jQuery first -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
