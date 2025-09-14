@@ -16,11 +16,23 @@ export default class UI {
   }
 
   renderBlackjack(hands){
-    $('#player-hand').text("Player: " + hands.player.map(c=>c.rank+c.suit).join(' ') +
-      " (" + this.controller.blackjack.handValue(hands.player) + ")");
-    $('#dealer-hand').text("Dealer: " + hands.dealer.map(c=>c.rank+c.suit).join(' ') +
-      " (" + this.controller.blackjack.handValue(hands.dealer) + ")");
-  }
+    const bj = this.controller.blackjack;
+
+    // Player hand
+    const playerDisplay = bj.playerHand.slice(0, bj.visiblePlayerCards)
+                            .map(c=>c.rank+c.suit).join(' ');
+    const playerValue = bj.handValue(bj.playerHand, bj.visiblePlayerCards);
+    $('#player-hand').text(`Player: ${playerDisplay} (${playerValue})`);
+
+    // Dealer hand
+    const dealerDisplay = bj.dealerHand.map((c,i)=>{
+        return i < bj.visibleDealerCards ? (c.rank+c.suit) : '??';
+    }).join(' ');
+    const dealerValue = (bj.visibleDealerCards === bj.dealerHand.length)
+                        ? bj.handValue(bj.dealerHand)
+                        : '?';
+    $('#dealer-hand').text(`Dealer: ${dealerDisplay} (${dealerValue})`);
+    }
 
   updateStatus(msg){
     $('#status-bar').text(this.controller.chess.updateStatus());

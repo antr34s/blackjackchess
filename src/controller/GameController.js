@@ -26,23 +26,25 @@ export default class GameController {
   startBlackjack(){
     this.blackjack.reset();
     this.blackjackActive = true;
-    this.chess.lockChess(); // 🔒 block chess during blackjack
+    this.chess.lockChess(); // block chess during blackjack
     this.ui.renderBlackjack(this.blackjack.getHands());
     this.ui.updateStatus("Blackjack: play your round (Hit/Stand).");
     }
 
 endBlackjack(winner){
+  if(winner === 'draw'){
+    this.ui.updateStatus("Draw! Replay the round to decide whose turn.");
+    setTimeout(()=>this.startBlackjack(), 500); // replay automatically
+    return;
+  }
+
   this.blackjackActive = false;
-  this.allowedColor = (winner==='player') ? 'w' : 'b';
+  this.chess.unlockChess();
+  const color = (winner==='player')?'w':'b';
+  this.chess.setAllowedColor(color);
+  this.chess.setTurn(color);
 
-  this.chess.setTurn(this.allowedColor);
-  this.chess.setAllowedColor(this.allowedColor);
-  this.chess.unlockChess(); // 🔓 unlock only after Blackjack ends
-
-  const msg = winner==='player'
-    ? "Player won — White plays next"
-    : "Dealer won — Black plays next";
-
+  const msg = winner==='player' ? "Player won — White plays next" : "Dealer won — Black plays next";
   setTimeout(()=>{ alert(msg); this.ui.updateStatus(msg); }, 500);
 }
 
