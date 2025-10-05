@@ -79,6 +79,11 @@ export default class ChessGame {
   setAllowedColor(color) {
     this.#allowedColor = color; // 'w' or 'b'
   }
+  makeMove(from, to, promotion = 'q') {
+    this.#game.move({ from, to, promotion });
+    this.#board.position(this.#game.fen());
+    if (this.onMoveEnd) this.onMoveEnd();
+  }
   lockChess() { this.blackjackLock = true; }
   unlockChess() { this.blackjackLock = false; }
 }

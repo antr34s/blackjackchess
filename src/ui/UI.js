@@ -5,14 +5,42 @@ export default class UI {
   }
 
   bindButtons(){
+     $('#mode-multiplayer').click(() => {
+        this.controller.setMode("multi");
+    });
+
+    $('#mode-bot').click(() => {
+        const skill = parseInt($('#bot-skill').val(), 10);
+        this.controller.setMode("bot", skill);
+    });
     $('#hit-btn').click(()=>this.controller.playerHit());
     $('#stand-btn').click(()=>this.controller.playerStand());
-    $('#start-btn').click(()=>{
-      this.controller.chess.game.reset();
-      this.controller.chess.board.start();
-      this.controller.chess.updateStatus();
-      this.controller.startBlackjack();
+    $('#start-btn').click(() => {
+        const vsBot = $('#bot-toggle').is(':checked');
+        const difficulty = parseInt($('#difficulty-select').val(), 10);
+
+        this.controller.vsBot = vsBot;
+        this.controller.botDifficulty = difficulty;
+
+        if (vsBot) {
+            this.controller.bot = new ChessBot(difficulty);
+        } else {
+            this.controller.bot = null;
+        }
+
+        this.controller.chess.game.reset();
+        this.controller.chess.board.start();
+        this.controller.chess.updateStatus();
+        this.controller.startBlackjack();
     });
+    $('#difficulty').change((e)=>{
+        this.controller.bot.setDifficulty(e.target.value);
+    });
+    $('#bot-toggle').change(function() {
+        const botEnabled = $(this).is(':checked');
+        $('#difficulty-select').prop('disabled', !botEnabled);
+    });
+
   }
 
   renderBlackjack(hands){
