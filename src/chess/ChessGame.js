@@ -79,10 +79,62 @@ export default class ChessGame {
   setAllowedColor(color) {
     this.#allowedColor = color; // 'w' or 'b'
   }
+  // Apply a normal move programmatically via the Chess object and update board
   makeMove(from, to, promotion = 'q') {
-    this.#game.move({ from, to, promotion });
+    const m = this.#game.move({ from, to, promotion });
+    if (m) {
+      this.#board.position(this.#game.fen());
+      if (this.onMoveEnd) this.onMoveEnd();
+      return true;
+    }
+    return false;
+  }
+  isKingInCheck(color) {
+    return this.#game.in_check() && this.#game.turn() === color;
+  }
+
+  // helper: find king square for a color ('w' or 'b')
+  getKingSquare(color) {
+    const files = ['a','b','c','d','e','f','g','h'];
+    for (let r = 1; r <= 8; r++) {
+      for (let f of files) {
+        const sq = f + r;
+        const p = this.#game.get(sq);
+        if (p && p.type === 'k' && p.color === color) return sq;
+      }
+    }
+    return null;
+  }
+
+   // Attempt to make the attacker capture the defender's king.
+  // Returns true if we performed the forced capture (and updated the board).
+  autoCaptureKing(attackerColor) {
+    const defenderColor = attackerColor === 'w' ? 'b' : 'w';
+    const kingSquare = this.getKingSquare(defenderColor);
+    if (!kingSquare) return false;
+
+    // Build a forced FEN where it's attacker's turn (reset en-passant to be safe)
+    const fenParts = this.#game.fen().split(' ');
+    fenParts[1] = attackerColor;
+    fenParts[3] = '-';
+    const forcedFen = fenParts.join(' ');
+
+    // Create a temporary Chess instance with the forced turn to see legal attacker moves
+    const tmp = new Chess(forcedFen);
+    const moves = tmp.moves({ verbose: true });
+
+    // find an attacking move that lands on the king square
+    const captureMove = moves.find(m => m.to === kingSquare && m.color === attackerColor);
+    if (!captureMove) return false;
+
+    // Apply it to the real game by loading the forced FEN then performing the move.
+    // Note: this changes the game state and clears history (acceptable for forced capture).
+    this.#game.load(forcedFen);
+    this.#game.move({ from: captureMove.from, to: captureMove.to, promotion: captureMove.promotion || 'q' });
+
+    // update visual board
     this.#board.position(this.#game.fen());
-    if (this.onMoveEnd) this.onMoveEnd();
+    return true;
   }
   lockChess() { this.blackjackLock = true; }
   unlockChess() { this.blackjackLock = false; }

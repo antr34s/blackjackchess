@@ -45,36 +45,58 @@ export default class GameController {
     this.ui.updateStatus("Blackjack: play your round (Hit/Stand).");
     }
 
-endBlackjack(winner) {
-  if (winner === 'draw') {
-    this.ui.updateStatus("Draw! Replay the round to decide whose turn.");
-    setTimeout(() => this.startBlackjack(), 500);
-    return;
-  }
+    endBlackjack(winner) {
+        if (winner === 'draw') {
+            this.ui.updateStatus("Draw! Replay the round to decide whose turn.");
+            setTimeout(() => this.startBlackjack(), 500);
+            return;
+        }
 
-  this.blackjackActive = false;
-  this.chess.unlockChess();
+        // BEFORE changing the chess turn: capture current "side to move" & check state
+        const defenderBefore = this.chess.game.turn();    // 'w' or 'b' (side that would move now)
+        const wasInCheckBefore = this.chess.game.in_check(); // true if defenderBefore is in check
 
-  // Determine color to play next
-  const color = (winner === 'player') ? 'w' : 'b';
-  this.chess.setAllowedColor(color);
-  this.chess.setTurn(color);
+        this.blackjackActive = false;
+        this.chess.unlockChess();
 
-  const msg = (winner === 'player')
-    ? "Player won — White plays next"
-    : "Dealer won — Black plays next";
-  this.ui.updateStatus(msg);
-  alert(msg);
+        const winnerColor = (winner === 'player') ? 'w' : 'b';
+        const msg = (winner === 'player') ? "Player won — White plays next" : "Dealer won — Black plays next";
 
-  // 🧠 If vs bot and bot's turn → let Stockfish play automatically
-  if (this.vsBot && this.bot && color === 'b') {
-    setTimeout(async () => {
-      const fen = this.chess.fen;
-      const move = await this.bot.getMove(fen);
-      this.chess.makeMove(move.slice(0, 2), move.slice(2, 4));
-    }, 700);
-  }
-}
+        // If defender was in check and the winner is the attacker, try forced capture immediately
+        if (wasInCheckBefore && winnerColor !== defenderBefore) {
+            console.log("sljl");
+            const captured = this.chess.autoCaptureKing(winnerColor);
+            if (captured) {
+            // King removed → immediate end of game
+            this.ui.updateStatus(`${winnerColor === 'w' ? 'White' : 'Black'} captured the king!`);
+            // small delay so UI updates (cards / board) render before the alert
+            setTimeout(() => {
+                alert(`${winnerColor === 'w' ? 'White' : 'Black'} captured the King — game over!`);
+            }, 200);
+            // lock the board - game over
+            this.chess.lockChess();
+            return;
+            }
+            // if autoCaptureKing returned false -> attacker cannot legally capture the king, fallthrough
+        }
+
+        // normal flow: allow winner to move next
+        this.chess.setAllowedColor(winnerColor);
+        this.chess.setTurn(winnerColor);
+
+        // show message after board has updated
+        this.ui.updateStatus(msg);
+        setTimeout(() => { alert(msg); }, 400);
+
+        // If dealer won and we're vs bot, ask bot to play now
+        if (winner === 'dealer' && this.vsBot && this.bot) {
+            setTimeout(async () => {
+            const fen = this.chess.fen;
+            const move = await this.bot.getMove(fen);
+            this.chess.makeMove(move.slice(0,2), move.slice(2,4));
+            }, 700);
+        }
+    }
 
   playerHit(){
     if(!this.blackjackActive) return;
